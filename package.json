@@ -2,13 +2,13 @@
   "name": "stayease-backend",
   "version": "1.0.0",
   "description": "",
-  "main": "src/server.js",
+  "main": "src/server.ts",
   "scripts": {
-    "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "dev": "nodemon --exec \"tsx src/server.ts\" --ext ts,js,json",
+    "start": "tsx src/server.ts"
   },
   "prisma": {
-    "seed": "node prisma/seed.js"
+    "seed": "tsx prisma/seed.ts"
   },
   "keywords": [],
   "author": "",
@@ -32,6 +32,11 @@
     "stripe": "^20.4.1"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^25.3.5",
     "nodemon": "^3.1.14",
     "prisma": "^7.4.2",
     "tsx": "^4.21.0"
