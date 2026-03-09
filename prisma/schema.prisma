@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AdminRole {
+  ADMIN
+  MANAGER
+  FRONTDESK
+}
+
+enum RoomCategory {
+  STANDARD
+  DELUXE
+  SUITE
+  FAMILY
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  TEMP_UNAVAILABLE
+  PERMANENTLY_UNAVAILABLE
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum PaymentType {
+  FULL
+  PARTIAL
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  phone         String?
+  fcmToken      String?
+  refreshToken  String?
+  resetToken    String?
+  resetTokenExp DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  bookings      Booking[]
+  reviews       Review[]
+  cart          Cart?
+}
+
+model Admin {
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  role          AdminRole      @default(FRONTDESK)
+  refreshToken  String?
+  resetToken    String?
+  resetTokenExp DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  bookings      Booking[]
+  notifications Notification[]
+}
+
+model Room {
+  id                 String             @id @default(cuid())
+  title              String
+  category           RoomCategory
+  description        String             @db.Text
+  pricePerNight      Decimal            @db.Decimal(10, 2)
+  maxGuests          Int
+  amenities          String[]
+  availabilityStatus AvailabilityStatus @default(AVAILABLE)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  images             RoomImage[]
+  bookings           Booking[]
+  reviews            Review[]
+  cartItems          CartItem[]
+
+  @@index([availabilityStatus, category])
+}
+
+model RoomImage {
+  id                 String   @id @default(cuid())
+  roomId             String
+  cloudinaryUrl      String
+  cloudinaryPublicId String
+  isPrimary          Boolean  @default(false)
+  uploadedAt         DateTime @default(now())
+  room               Room     @relation(fields: [roomId], references: [id])
+
+  @@index([roomId])
+}
+
+model Booking {
+  id          String        @id @default(cuid())
+  roomId      String
+  userId      String?
+  adminId     String?
+  guestName   String
+  guestEmail  String
+  guestPhone  String
+  checkIn     DateTime
+  checkOut    DateTime
+  guestCount  Int
+  totalAmount Decimal       @db.Decimal(10, 2)
+  status      BookingStatus @default(PENDING)
+  cancelledAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  room        Room          @relation(fields: [roomId], references: [id])
+  user        User?         @relation(fields: [userId], references: [id])
+  admin       Admin?        @relation(fields: [adminId], references: [id])
+  payment     Payment?
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  bookingId             String        @unique
+  userId                String?
+  stripePaymentIntentId String?       @unique
+  amount                Decimal       @db.Decimal(10, 2)
+  status                PaymentStatus @default(PENDING)
+  type                  PaymentType   @default(FULL)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  booking               Booking       @relation(fields: [bookingId], references: [id])
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+}
+
+model CartItem {
+  id         String   @id @default(cuid())
+  cartId     String
+  roomId     String
+  checkIn    DateTime
+  checkOut   DateTime
+  guestCount Int
+  createdAt  DateTime @default(now())
+  cart       Cart     @relation(fields: [cartId], references: [id])
+  room       Room     @relation(fields: [roomId], references: [id])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  rating    Int
+  comment   String   @db.Text
+  createdAt DateTime @default(now())
+  room      Room     @relation(fields: [roomId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([roomId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  adminId   String
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+  admin     Admin    @relation(fields: [adminId], references: [id])
+}
+
+model HotelConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
