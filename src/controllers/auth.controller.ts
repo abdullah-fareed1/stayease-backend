@@ -1,20 +1,17 @@
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
-const prisma = require('../config/db');
-const { generateAccessToken, generateRefreshToken } = require('../utils/jwt');
-const { success, error } = require('../utils/response');
-const {
-  sendWelcomeEmail,
-  sendPasswordResetEmail,
-  sendPasswordChangedEmail,
-} = require('../services/email.service');
+import { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
+import { prisma } from '../config/db';
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt';
+import { success, error } from '../utils/response';
+import { sendWelcomeEmail, sendPasswordResetEmail, sendPasswordChangedEmail } from '../services/email.service';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
-const register = async (req, res) => {
-  const { name, phone, fcmToken } = req.body;
-  let { email, password } = req.body;
+export const register = async (req: Request, res: Response) => {
+  const { phone } = req.body;
+  let { name, email, password } = req.body;
 
   const trimmedName = (name || '').trim();
   if (!trimmedName || trimmedName.length < 2 || trimmedName.length > 100) {
@@ -40,25 +37,15 @@ const register = async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
 
-  const accessToken = generateAccessToken({ userId: 'temp', role: 'CUSTOMER' });
-
   const user = await prisma.user.create({
-    data: {
-      name: trimmedName,
-      email,
-      passwordHash,
-      phone: phone || null,
-    },
+    data: { name: trimmedName, email, passwordHash, phone: phone || null },
   });
 
-  const newAccessToken = generateAccessToken({ userId: user.id, role: 'CUSTOMER' });
+  const accessToken = generateAccessToken({ userId: user.id, role: 'CUSTOMER' });
   const refreshToken = generateRefreshToken({ userId: user.id, role: 'CUSTOMER' });
   const hashedRefresh = await bcrypt.hash(refreshToken, 10);
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { refreshToken: hashedRefresh },
-  });
+  await prisma.user.update({ where: { id: user.id }, data: { refreshToken: hashedRefresh } });
 
   await prisma.cart.create({ data: { userId: user.id } });
 
@@ -66,17 +53,13 @@ const register = async (req, res) => {
 
   return success(
     res,
-    {
-      user: { id: user.id, name: user.name, email: user.email, phone: user.phone },
-      accessToken: newAccessToken,
-      refreshToken,
-    },
+    { user: { id: user.id, name: user.name, email: user.email, phone: user.phone }, accessToken, refreshToken },
     'Registration successful',
     201
   );
 };
 
-const login = async (req, res) => {
+export const login = async (req: Request, res: Response) => {
   let { email, password, fcmToken } = req.body;
 
   email = (email || '').trim().toLowerCase();
@@ -101,7 +84,7 @@ const login = async (req, res) => {
   const refreshToken = generateRefreshToken({ userId: user.id, role: 'CUSTOMER' });
   const hashedRefresh = await bcrypt.hash(refreshToken, 10);
 
-  const updateData = { refreshToken: hashedRefresh };
+  const updateData: Record<string, string> = { refreshToken: hashedRefresh };
   if (fcmToken) updateData.fcmToken = fcmToken;
 
   await prisma.user.update({ where: { id: user.id }, data: updateData });
@@ -113,18 +96,17 @@ const login = async (req, res) => {
   }, 'Login successful');
 };
 
-const refresh = async (req, res) => {
+export const refresh = async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
 
   if (!refreshToken) {
     return error(res, 'Refresh token is required.', 401);
   }
 
-  let payload;
+  let payload: any;
   try {
-    const { verifyRefreshToken } = require('../utils/jwt');
     payload = verifyRefreshToken(refreshToken);
-  } catch (err) {
+  } catch {
     return error(res, 'Invalid or expired refresh token. Please log in again.', 401);
   }
 
@@ -151,16 +133,18 @@ const refresh = async (req, res) => {
   return success(res, { accessToken: newAccessToken, refreshToken: newRefreshToken }, 'Token refreshed');
 };
 
-const logout = async (req, res) => {
+export const logout = async (req: Request, res: Response) => {
+  const user = (req as any).user;
+
   await prisma.user.update({
-    where: { id: req.user.id },
+    where: { id: user.id },
     data: { refreshToken: null, fcmToken: null },
   });
 
   return success(res, null, 'Logged out successfully.');
 };
 
-const forgotPassword = async (req, res) => {
+export const forgotPassword = async (req: Request, res: Response) => {
   let { email } = req.body;
 
   email = (email || '').trim().toLowerCase();
@@ -175,7 +159,7 @@ const forgotPassword = async (req, res) => {
     return success(res, null, RESPONSE);
   }
 
-  const plainToken = crypto.randomBytes(32).toString('hex');
+  const plainToken = randomBytes(32).toString('hex');
   const hashedToken = await bcrypt.hash(plainToken, 10);
   const expiry = new Date(Date.now() + 3600000);
 
@@ -191,9 +175,9 @@ const forgotPassword = async (req, res) => {
   return success(res, null, RESPONSE);
 };
 
-const resetPassword = async (req, res) => {
-  const { token } = req.body;
-  let { email, newPassword } = req.body;
+export const resetPassword = async (req: Request, res: Response) => {
+  const { token, newPassword } = req.body;
+  let { email } = req.body;
 
   email = (email || '').trim().toLowerCase();
 
@@ -210,10 +194,7 @@ const resetPassword = async (req, res) => {
   }
 
   if (!user.resetTokenExp || user.resetTokenExp < new Date()) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { resetToken: null, resetTokenExp: null },
-    });
+    await prisma.user.update({ where: { id: user.id }, data: { resetToken: null, resetTokenExp: null } });
     return error(res, 'Reset link has expired. Please request a new one.', 400);
   }
 
@@ -233,5 +214,3 @@ const resetPassword = async (req, res) => {
 
   return success(res, null, 'Password reset successfully. Please log in with your new password.');
 };
-
-module.exports = { register, login, refresh, logout, forgotPassword, resetPassword };

@@ -1,8 +1,9 @@
-const { verifyAccessToken } = require('../utils/jwt');
-const { error } = require('../utils/response');
-const prisma = require('../config/db');
+import { Request, Response, NextFunction } from 'express';
+import { verifyAccessToken } from '../utils/jwt';
+import { error } from '../utils/response';
+import { prisma } from '../config/db';
 
-const requireCustomerAuth = async (req, res, next) => {
+export const requireCustomerAuth = async (req: Request, res: Response, next: NextFunction) => {
   const header = req.headers.authorization;
 
   if (!header || !header.startsWith('Bearer ')) {
@@ -11,10 +12,10 @@ const requireCustomerAuth = async (req, res, next) => {
 
   const token = header.split(' ')[1];
 
-  let payload;
+  let payload: any;
   try {
     payload = verifyAccessToken(token);
-  } catch (err) {
+  } catch (err: any) {
     if (err.name === 'TokenExpiredError') {
       return error(res, 'Session expired. Please refresh your token.', 401);
     }
@@ -26,13 +27,10 @@ const requireCustomerAuth = async (req, res, next) => {
   }
 
   const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-
   if (!user) {
     return error(res, 'User not found.', 401);
   }
 
-  req.user = user;
+  (req as any).user = user;
   next();
 };
-
-module.exports = { requireCustomerAuth };
