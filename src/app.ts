@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import errorHandler from './middleware/errorHandler';
 import authRouter from './routes/auth.routes';
+import adminAuthRouter from './routes/adminAuth.routes';
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api/admin/auth', adminAuthRouter);
 
 app.use(errorHandler);
 

@@ -1,13 +1,11 @@
-const buildMeta = (total, page, pageSize) => ({
+export const buildMeta = (total: number, page: number, pageSize: number) => ({
   page,
   pageSize,
   total,
   totalPages: Math.ceil(total / pageSize),
 });
 
-const buildSkipTake = (page, pageSize) => ({
+export const buildSkipTake = (page: number, pageSize: number) => ({
   skip: (page - 1) * pageSize,
   take: pageSize,
 });
-
-module.exports = { buildMeta, buildSkipTake };
