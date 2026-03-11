@@ -5,7 +5,8 @@
   "main": "src/server.ts",
   "scripts": {
     "dev": "nodemon --exec \"tsx src/server.ts\" --ext ts,js,json",
-    "start": "tsx src/server.ts"
+    "start": "tsx src/server.ts",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
