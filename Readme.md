@@ -2,7 +2,7 @@
 
 Backend REST API for **StayEase**, a hotel room booking platform built for Grand Horizon Hotels. Handles everything from authentication and room management to Stripe payments, Cloudinary image uploads, and Firebase push notifications.
 
-Built with Node.js, Express, Prisma ORM, and a Neon PostgreSQL database.
+Built with Node.js, Express, TypeScript, Prisma ORM, and a Neon PostgreSQL database.
 
 ---
 
@@ -15,7 +15,7 @@ Built with Node.js, Express, Prisma ORM, and a Neon PostgreSQL database.
 - Shopping cart with batch checkout
 - Firebase Cloud Messaging for push notifications to guests
 - Admin dashboard with revenue stats, occupancy overview, and best-performing rooms
-- Transactional emails via Resend (booking confirmations, receipts, password resets)
+- Transactional emails via Resend (booking confirmations, receipts, OTP password resets)
 - Post-checkout review and rating system
 
 ---
@@ -26,8 +26,9 @@ Built with Node.js, Express, Prisma ORM, and a Neon PostgreSQL database.
 |---|---|
 | Runtime | Node.js v20+ |
 | Framework | Express.js |
+| Language | TypeScript |
 | Database | PostgreSQL (Neon serverless) |
-| ORM | Prisma |
+| ORM | Prisma v7 |
 | Auth | JWT — access token 15m, refresh token 7d |
 | Payments | Stripe (sandbox) |
 | Images | Cloudinary |
@@ -44,16 +45,15 @@ Built with Node.js, Express, Prisma ORM, and a Neon PostgreSQL database.
 src/
 ├── config/          # Prisma client, Cloudinary, Stripe, Firebase init
 ├── controllers/     # One controller per domain
-├── middleware/       # JWT auth guards, role guards, error handler
+├── middleware/      # JWT auth guards, role guards, error handler
 ├── routes/          # Route definitions (customer + admin)
 ├── services/        # Email, Cloudinary upload/delete, FCM send
-├── validations/     # Input validation schemas
 ├── utils/           # Response helpers, JWT helpers, pagination
-├── app.js           # Express setup and middleware registration
-└── server.js        # Entry point
+├── app.ts           # Express setup and middleware registration
+└── server.ts        # Entry point
 prisma/
 ├── schema.prisma    # Full data model
-└── seed.js          # Seeds initial admin account
+└── seed.ts          # Seeds initial admin account
 ```
 
 ---
@@ -63,7 +63,7 @@ prisma/
 **Prerequisites:** Node.js v20+, a [Neon](https://neon.tech) database, Cloudinary account, Stripe account, Resend account, Firebase project.
 
 ```bash
-git clone https://github.com/yourusername/stayease-backend.git
+git clone https://github.com/Abdullah-Fareed1/stayease-backend.git
 cd stayease-backend
 npm install
 ```
@@ -78,6 +78,7 @@ Run the database migration and seed the first admin account:
 
 ```bash
 npx prisma migrate dev --name init
+npx prisma generate
 npx prisma db seed
 ```
 
@@ -88,6 +89,12 @@ npm run dev
 ```
 
 The API will be running at `http://localhost:3000`.
+
+Default seeded admin credentials:
+- Email: `admin@grandhotel.lk`
+- Password: `Admin@1234`
+
+> Change this password immediately after first login in production.
 
 ---
 
@@ -119,6 +126,8 @@ CLIENT_BASE_URL=
 PORT=3000
 ```
 
+> If `RESEND_API_KEY` is not set, all email functions fall back to `console.log` so development works without email credentials configured. OTPs will be printed to the server console.
+
 ---
 
 ## API overview
@@ -142,8 +151,8 @@ All responses follow a consistent shape:
 | POST | `/api/auth/login` | Login, returns token pair |
 | POST | `/api/auth/refresh` | Get new access token |
 | POST | `/api/auth/logout` | Invalidate refresh token |
-| POST | `/api/auth/forgot-password` | Send reset email |
-| POST | `/api/auth/reset-password` | Reset with token |
+| POST | `/api/auth/forgot-password` | Send 6-digit OTP to email |
+| POST | `/api/auth/reset-password` | Reset password using OTP |
 
 ### Auth — admin
 | Method | Endpoint | Description |
@@ -151,8 +160,8 @@ All responses follow a consistent shape:
 | POST | `/api/admin/auth/login` | Admin login |
 | POST | `/api/admin/auth/refresh` | Refresh token |
 | POST | `/api/admin/auth/logout` | Logout |
-| POST | `/api/admin/auth/forgot-password` | Send reset email |
-| POST | `/api/admin/auth/reset-password` | Reset with token |
+| POST | `/api/admin/auth/forgot-password` | Send 6-digit OTP to email |
+| POST | `/api/admin/auth/reset-password` | Reset password using OTP |
 
 ### Rooms
 | Method | Endpoint | Auth | Description |
@@ -204,11 +213,51 @@ All responses follow a consistent shape:
 
 ## Auth design
 
-Two completely separate token flows — customers and admins never share tokens.
+Two completely separate token flows — customers and admins never share tokens. Admin tokens carry `{ adminId, role }` in the payload. Customer tokens carry `{ userId, role: "CUSTOMER" }`. A customer token will be rejected on any admin route and vice versa.
 
 Access tokens expire in **15 minutes**. When a request returns 401, the client calls `/auth/refresh` with the refresh token to get a new pair. Refresh tokens are stored as bcrypt hashes in the database, not plain text. Logging out clears the hash server-side so the old token is permanently dead even if intercepted.
 
-Password reset tokens are single-use, expire in 1 hour, and are also stored hashed. The forgot-password endpoint always returns the same response regardless of whether the email exists — no email enumeration.
+### Admin roles
+
+| Role | Description |
+|---|---|
+| `ADMIN` | Full access to all admin endpoints |
+| `MANAGER` | Operational access |
+| `FRONTDESK` | Limited access (check-ins, walk-ins) |
+
+Admin accounts are created via the seed file only — there is no public registration endpoint.
+
+---
+
+## Password reset — OTP flow
+
+Both customer and admin password resets use a **6-digit OTP sent to email**. This is designed for the mobile app — there are no reset links.
+
+**Step 1 — Request OTP**
+
+```
+POST /api/auth/forgot-password
+Body: { "email": "user@example.com" }
+```
+
+A 6-digit OTP is generated, hashed with bcrypt, and stored in the database with a **10-minute expiry**. The OTP is emailed to the user. The response is always the same message regardless of whether the email exists — no email enumeration.
+
+**Step 2 — Submit OTP + new password**
+
+```
+POST /api/auth/reset-password
+Body: {
+  "email": "user@example.com",
+  "otp": "847291",
+  "newPassword": "NewPass@123"
+}
+```
+
+The OTP is verified against the stored hash. On success the new password is saved, and `resetToken`, `resetTokenExp`, and `refreshToken` are all cleared — forcing re-login on all devices.
+
+The same flow applies for admins at `/api/admin/auth/forgot-password` and `/api/admin/auth/reset-password`.
+
+> During development without Resend configured, the OTP prints to the server console: `[EMAIL] OTP for user@example.com: 847291`
 
 ---
 
@@ -242,10 +291,13 @@ Booking availability is checked with an overlap query — any existing booking w
 ## Scripts
 
 ```bash
-npm run dev          # Start with nodemon
-npm run start        # Production start
-npx prisma studio    # Open Prisma GUI
-npx prisma db seed   # Seed admin account
+npm run dev              # Start with nodemon (hot reload)
+npm run build            # Compile TypeScript to dist/
+npm run start            # Run compiled production build
+npx prisma studio        # Open Prisma GUI
+npx prisma db seed       # Seed admin account
+npx prisma migrate dev   # Create and apply a new migration
+npx prisma generate      # Regenerate Prisma client after schema changes
 ```
 
 ---
@@ -265,6 +317,8 @@ Use test card `4242 4242 4242 4242` with any future expiry and any CVC.
 ## Security
 
 - Passwords hashed with bcrypt (cost factor 12)
+- OTPs hashed with bcrypt before storage — plain OTP is never persisted
+- Refresh tokens hashed before storage — plain token is never persisted
 - JWT secrets are separate for access and refresh tokens
 - Rate limiting on all auth routes (10 req / 15 min per IP)
 - `helmet` sets secure HTTP headers on every response
@@ -276,4 +330,4 @@ Use test card `4242 4242 4242 4242` with any future expiry and any CVC.
 
 ## License
 
-Public — MIT license.
+MIT

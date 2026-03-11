@@ -1,13 +1,14 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { randomBytes } from 'node:crypto';
 import { prisma } from '../config/db';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt';
 import { success, error } from '../utils/response';
-import { sendPasswordResetEmail, sendPasswordChangedEmail } from '../services/email.service';
+import { sendOtpEmail, sendPasswordChangedEmail } from '../services/email.service';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+
+const generateOtp = (): string => Math.floor(100000 + Math.random() * 900000).toString();
 
 export const adminLogin = async (req: Request, res: Response) => {
   let { email, password } = req.body;
@@ -103,55 +104,56 @@ export const adminForgotPassword = async (req: Request, res: Response) => {
     return error(res, 'A valid email is required.', 400);
   }
 
-  const RESPONSE = 'If this email is registered, you will receive a reset link shortly.';
+  const RESPONSE = 'If this email is registered, you will receive an OTP shortly.';
 
   const admin = await prisma.admin.findUnique({ where: { email } });
   if (!admin) {
     return success(res, null, RESPONSE);
   }
 
-  const plainToken = randomBytes(32).toString('hex');
-  const hashedToken = await bcrypt.hash(plainToken, 10);
-  const expiry = new Date(Date.now() + 3600000);
+  const otp = generateOtp();
+  const hashedOtp = await bcrypt.hash(otp, 10);
+  const expiry = new Date(Date.now() + 10 * 60 * 1000);
 
   await prisma.admin.update({
     where: { id: admin.id },
-    data: { resetToken: hashedToken, resetTokenExp: expiry },
+    data: { resetToken: hashedOtp, resetTokenExp: expiry },
   });
 
-  const resetUrl = `${process.env.CLIENT_BASE_URL}/admin/reset-password?token=${plainToken}&email=${email}`;
-
-  sendPasswordResetEmail(email, admin.name, resetUrl).catch(() => {});
+  sendOtpEmail(email, admin.name, otp).catch(() => {});
 
   return success(res, null, RESPONSE);
 };
 
 export const adminResetPassword = async (req: Request, res: Response) => {
-  const { token, newPassword } = req.body;
+  const { otp, newPassword } = req.body;
   let { email } = req.body;
 
   email = (email || '').trim().toLowerCase();
 
-  if (!newPassword || newPassword.length < 8) {
-    return error(res, 'Password must be at least 8 characters.', 400);
+  if (!email || !EMAIL_REGEX.test(email)) {
+    return error(res, 'A valid email is required.', 400);
   }
-  if (!PASSWORD_REGEX.test(newPassword)) {
-    return error(res, 'Password must contain uppercase, lowercase, and number.', 400);
+  if (!otp || otp.toString().length !== 6) {
+    return error(res, 'A valid 6-digit OTP is required.', 400);
+  }
+  if (!newPassword || !PASSWORD_REGEX.test(newPassword)) {
+    return error(res, 'Password must be at least 8 characters and contain uppercase, lowercase, and a number.', 400);
   }
 
   const admin = await prisma.admin.findUnique({ where: { email } });
   if (!admin || !admin.resetToken) {
-    return error(res, 'Invalid or expired reset link.', 400);
+    return error(res, 'Invalid or expired OTP.', 400);
   }
 
   if (!admin.resetTokenExp || admin.resetTokenExp < new Date()) {
     await prisma.admin.update({ where: { id: admin.id }, data: { resetToken: null, resetTokenExp: null } });
-    return error(res, 'Reset link has expired. Please request a new one.', 400);
+    return error(res, 'OTP has expired. Please request a new one.', 400);
   }
 
-  const valid = await bcrypt.compare(token, admin.resetToken);
+  const valid = await bcrypt.compare(otp.toString(), admin.resetToken);
   if (!valid) {
-    return error(res, 'Invalid or expired reset link.', 400);
+    return error(res, 'Invalid or expired OTP.', 400);
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 12);
