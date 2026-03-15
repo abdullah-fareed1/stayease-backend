@@ -4,6 +4,8 @@ import helmet from 'helmet';
 import errorHandler from './middleware/errorHandler';
 import authRouter from './routes/auth.routes';
 import adminAuthRouter from './routes/adminAuth.routes';
+import roomRouter from './routes/room.routes';
+import adminRoomRouter from './routes/adminRoom.routes';
 
 const app = express();
 
@@ -23,6 +25,8 @@ app.get('/health', (req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/admin/auth', adminAuthRouter);
+app.use('/api/rooms', roomRouter);
+app.use('/api/admin/rooms', adminRoomRouter);
 
 app.use(errorHandler);
 
