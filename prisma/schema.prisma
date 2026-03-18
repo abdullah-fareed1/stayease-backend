@@ -129,6 +129,7 @@ model Booking {
   user        User?         @relation(fields: [userId], references: [id])
   admin       Admin?        @relation(fields: [adminId], references: [id])
   payment     Payment?
+  review      Review?
 }
 
 model Payment {
@@ -139,6 +140,7 @@ model Payment {
   amount                Decimal       @db.Decimal(10, 2)
   status                PaymentStatus @default(PENDING)
   type                  PaymentType   @default(FULL)
+  paidAt                DateTime?
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
   booking               Booking       @relation(fields: [bookingId], references: [id])
@@ -169,11 +171,13 @@ model Review {
   id        String   @id @default(cuid())
   roomId    String
   userId    String
+  bookingId String   @unique
   rating    Int
   comment   String   @db.Text
   createdAt DateTime @default(now())
   room      Room     @relation(fields: [roomId], references: [id])
   user      User     @relation(fields: [userId], references: [id])
+  booking   Booking  @relation(fields: [bookingId], references: [id])
 
   @@index([roomId])
 }
