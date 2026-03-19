@@ -1,1 +1,1 @@
-export { adminRefundPayment } from './payment.controller';
+export { adminRefundPayment, getPaymentsForBooking } from './payment.controller';
