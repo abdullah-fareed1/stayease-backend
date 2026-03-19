@@ -121,7 +121,7 @@ export const getMyBookings = async (req: Request, res: Response) => {
             images: { where: { isPrimary: true }, take: 1 },
           },
         },
-        payment: true,
+        payments: true,
       },
     }),
     prisma.booking.count({ where }),
@@ -144,7 +144,7 @@ export const getMyBookings = async (req: Request, res: Response) => {
         pricePerNight: b.room.pricePerNight,
         primaryImage: b.room.images[0] ? { id: b.room.images[0].id, url: b.room.images[0].cloudinaryUrl } : null,
       },
-      payment: b.payment ?? null,
+      payments: b.payments,
     })),
     meta: buildMeta(total, page, pageSize),
   }, 'Bookings fetched successfully');
@@ -162,7 +162,7 @@ export const getMyBookingById = async (req: Request, res: Response) => {
           images: { orderBy: [{ isPrimary: 'desc' }, { uploadedAt: 'asc' }] },
         },
       },
-      payment: true,
+      payments: true,
     },
   });
 
@@ -177,7 +177,7 @@ export const cancelBooking = async (req: Request, res: Response) => {
 
   const booking = await prisma.booking.findFirst({
     where: { id: bookingId, userId: user.id },
-    include: { payment: true },
+    include: { payments: true },
   });
 
   if (!booking) return error(res, 'Booking not found.', 404);

@@ -51,7 +51,7 @@ export const getAllBookings = async (req: Request, res: Response) => {
         room: {
           include: { images: { where: { isPrimary: true }, take: 1 } },
         },
-        payment: true,
+        payments: true,
         user: { select: { id: true, name: true, email: true } },
       },
     }),
@@ -76,7 +76,7 @@ export const getAllBookings = async (req: Request, res: Response) => {
         title: b.room.title,
         primaryImage: b.room.images[0] ? { url: b.room.images[0].cloudinaryUrl } : null,
       },
-      payment: b.payment ?? null,
+      payments: b.payments,
       user: b.user ?? null,
     })),
     meta: buildMeta(total, page, pageSize),
@@ -92,7 +92,7 @@ export const getBookingById = async (req: Request, res: Response) => {
       room: {
         include: { images: { orderBy: [{ isPrimary: 'desc' }, { uploadedAt: 'asc' }] } },
       },
-      payment: true,
+      payments: true,
       user: { select: { id: true, name: true, email: true, phone: true } },
     },
   });

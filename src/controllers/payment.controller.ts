@@ -79,11 +79,6 @@ export const stripeWebhook = async (req: Request, res: Response) => {
         await prisma.booking.update({ where: { id: booking.id }, data: { status: 'CONFIRMED' } });
       }
 
-      const totalPaid = await prisma.payment.aggregate({
-        where: { bookingId: booking.id, status: 'PAID' },
-        _sum: { amount: true },
-      });
-
       if (payment.userId) {
         const userRec = await prisma.user.findUnique({ where: { id: payment.userId } });
         if (userRec) {
@@ -108,12 +103,18 @@ export const stripeWebhook = async (req: Request, res: Response) => {
 };
 
 export const getPaymentsForBooking = async (req: Request, res: Response) => {
-  const user = (req as any).user;
   const bookingId = req.params.bookingId as string;
+  const user = (req as any).user;
+  const admin = (req as any).admin;
 
-  const booking = await prisma.booking.findFirst({
-    where: { id: bookingId, userId: user.id },
-  });
+  let booking;
+
+  if (admin) {
+    booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  } else {
+    booking = await prisma.booking.findFirst({ where: { id: bookingId, userId: user.id } });
+  }
+
   if (!booking) return error(res, 'Booking not found.', 404);
 
   const payments = await prisma.payment.findMany({

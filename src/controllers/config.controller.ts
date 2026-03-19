@@ -3,11 +3,14 @@ import { prisma } from '../config/db';
 import { success, error } from '../utils/response';
 
 const CONFIG_KEYS = ['name', 'address', 'phone', 'email', 'latitude', 'longitude', 'description', 'checkInTime', 'checkOutTime'];
+const FLOAT_KEYS = ['latitude', 'longitude'];
 
 export const getHotelConfig = async (req: Request, res: Response) => {
   const configs = await prisma.hotelConfig.findMany();
-  const config: Record<string, string> = {};
-  configs.forEach((c) => { config[c.key] = c.value; });
+  const config: Record<string, string | number> = {};
+  configs.forEach((c) => {
+    config[c.key] = FLOAT_KEYS.includes(c.key) ? parseFloat(c.value) : c.value;
+  });
   return success(res, { config }, 'Hotel config fetched successfully');
 };
 
@@ -37,8 +40,10 @@ export const updateHotelConfig = async (req: Request, res: Response) => {
   );
 
   const configs = await prisma.hotelConfig.findMany();
-  const config: Record<string, string> = {};
-  configs.forEach((c) => { config[c.key] = c.value; });
+  const config: Record<string, string | number> = {};
+  configs.forEach((c) => {
+    config[c.key] = FLOAT_KEYS.includes(c.key) ? parseFloat(c.value) : c.value;
+  });
 
   return success(res, { config }, 'Hotel config updated successfully');
 };

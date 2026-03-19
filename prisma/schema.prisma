@@ -128,13 +128,16 @@ model Booking {
   room        Room          @relation(fields: [roomId], references: [id])
   user        User?         @relation(fields: [userId], references: [id])
   admin       Admin?        @relation(fields: [adminId], references: [id])
-  payment     Payment?
+  payments    Payment[]
   review      Review?
+
+  @@index([roomId, checkIn, checkOut])
+  @@index([userId])
 }
 
 model Payment {
   id                    String        @id @default(cuid())
-  bookingId             String        @unique
+  bookingId             String
   userId                String?
   stripePaymentIntentId String?       @unique
   amount                Decimal       @db.Decimal(10, 2)
@@ -144,6 +147,8 @@ model Payment {
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
   booking               Booking       @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
 }
 
 model Cart {

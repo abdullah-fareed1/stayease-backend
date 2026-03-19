@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { requireAdminAuth } from '../middleware/adminMiddleware';
+import { requireAdminAuth, requireAdminRole } from '../middleware/adminMiddleware';
 import { getHotelConfig, updateHotelConfig } from '../controllers/config.controller';
 
 const router = Router();
 
-router.get('/', getHotelConfig);
-router.put('/', requireAdminAuth, updateHotelConfig);
+router.get('/config', getHotelConfig);
+router.put('/config', requireAdminAuth, requireAdminRole(['ADMIN']), updateHotelConfig);
 
 export default router;
